@@ -1,5 +1,11 @@
 # next-typesafe-url
 
+## 6.1.0
+
+### Minor Changes
+
+- beac941: Adds TypeScript configuration file support
+
 ## 6.0.0
 
 ### Major Changes
