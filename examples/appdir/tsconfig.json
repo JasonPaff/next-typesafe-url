@@ -17,6 +17,10 @@
     "plugins": [
       {
         "name": "next"
+      },
+      {
+        "name": "next-typesafe-url-plugin",
+        "debug": true
       }
     ],
     "paths": {

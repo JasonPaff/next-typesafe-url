@@ -15,7 +15,8 @@ export function createPlugin(typescript: typeof ts) {
       const config = resolveConfig(info.config as PluginConfig | undefined);
       const logger = new Logger(info, config.debug);
 
-      logger.info("Plugin initializing...");
+      logger.log("Plugin initializing...");
+      logger.log(`Project: ${info.project.getCurrentDirectory()}`);
       logger.info(`Config: ${JSON.stringify(config)}`);
 
       const projectPath = info.project.getCurrentDirectory();
@@ -25,7 +26,9 @@ export function createPlugin(typescript: typeof ts) {
         const detected = detectAppDir(typescript, projectPath);
         if (detected) {
           config.appDir = detected;
-          logger.info(`Auto-detected app directory: ${detected}`);
+          logger.log(`Auto-detected app directory: ${detected}`);
+        } else {
+          logger.log(`Using default app directory: ${config.appDir}`);
         }
       }
 
@@ -38,7 +41,7 @@ export function createPlugin(typescript: typeof ts) {
         logger
       );
 
-      logger.info("Plugin initialized successfully");
+      logger.log("Plugin initialized successfully");
       return proxy;
     },
   };
@@ -132,29 +135,32 @@ function getRouteDefinition(
   // Detect if position is on a route string in a $path() call
   const routeInfo = detectRouteString(typescript, sourceFile, position);
   if (!routeInfo) {
-    logger.info("Not a route string");
+    logger.info(`Not a route string at position ${position}`);
     return undefined;
   }
 
-  logger.info(`Detected route: ${routeInfo.route}`);
+  logger.log(`Detected route: "${routeInfo.route}" at ${fileName}:${position}`);
 
   // Resolve route to file path
   let resolution = resolveRouteToFile(typescript, routeInfo.route, projectPath, config);
+  logger.info(`Direct resolution: ${resolution?.filePath} (exists: ${resolution?.exists})`);
 
   // If direct resolution failed, try with route groups
   if (!resolution?.exists) {
+    logger.info("Trying route group search...");
     const groupPath = findRouteTypeWithGroups(typescript, routeInfo.route, projectPath, config);
     if (groupPath) {
       resolution = { filePath: groupPath, exists: true };
+      logger.info(`Found via route groups: ${groupPath}`);
     }
   }
 
   if (!resolution?.exists) {
-    logger.info(`Route file not found for: ${routeInfo.route}`);
+    logger.log(`Route file not found for: ${routeInfo.route}`);
     return undefined;
   }
 
-  logger.info(`Resolved to: ${resolution.filePath}`);
+  logger.log(`Navigating to: ${resolution.filePath}`);
 
   // Find the Route export position in the target file
   const targetPosition = findRouteExportPosition(typescript, program, resolution.filePath);
