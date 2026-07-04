@@ -79,6 +79,18 @@ $path({
 
 When `validator` is passed, the params are typed as the validator's **output** types instead of its input types.
 
+If a route's schemas contain a codec, passing `validator` is **required**- omitting it is a compile error:
+
+```tsx
+$path({
+  route: "/report",
+  searchParams: { from: new Date() },
+});
+// Error: Property 'validator' is missing in type ... but required in type ...
+```
+
+This is enforced at the type level because without the runtime schema, `$path` can't run the codec's encode step- the params would silently fall back to plain JSON serialization and produce a URL the decode side can't parse. Routes without codecs are unaffected and never need a `validator`.
+
 Codecs are not limited to simple scalar conversions- the two sides of a codec can have completely different shapes. Here a structured object round-trips through a compact, human readable `lat,lng` string instead of a JSON blob:
 
 ```ts

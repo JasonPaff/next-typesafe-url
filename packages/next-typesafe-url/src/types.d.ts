@@ -21,9 +21,12 @@ type StaticRoutes = keyof StaticRouter;
 type DynamicRoutes = keyof DynamicRouter;
 
 // converts a DynamicRoute into its inferred input and output types
+// also carries the original Route object type so PathOptions can inspect
+// the schemas for codecs at the type level
 type InferRoute<T extends DynamicRoute> = {
   input: HandleUndefined<InferInput<T>>;
   output: HandleUndefined<InferOutput<T>>;
+  routeType: T;
 };
 
 // checks if a type has a property
@@ -123,6 +126,77 @@ type DynamicRoute = {
   routeParams?: z.ZodObject<z.ZodRawShape>;
 };
 
+// recursively checks whether a zod schema contains a codec anywhere in its
+// structure- directly, or nested inside objects, wrapper types, collections,
+// unions, intersections, or pipes
+// codecs are bidirectional (they define an encode step), which is what lets
+// $path serialize output types back into URL strings- so their presence is
+// what makes the $path `validator` argument mandatory
+// unidirectional `.transform()`s produce a ZodPipe, NOT a ZodCodec- z.encode
+// throws on them, so they must not trigger the requirement. zod distinguishes
+// the two structurally: $ZodCodecDef requires transform/reverseTransform
+// while $ZodPipeDef marks them optional
+// unhandled wrappers (e.g. z.lazy) fail open to `false`, which just means the
+// validator stays optional for that route- the same behavior as today
+type HasCodec<S> =
+  S extends z.ZodCodec
+    ? true
+    : S extends z.ZodObject<infer Shape>
+      ? true extends { [K in keyof Shape]: HasCodec<Shape[K]> }[keyof Shape]
+        ? true
+        : false
+      : S extends
+            | z.ZodOptional<infer I>
+            | z.ZodNullable<infer I>
+            | z.ZodDefault<infer I>
+            | z.ZodPrefault<infer I>
+            | z.ZodNonOptional<infer I>
+            | z.ZodCatch<infer I>
+            | z.ZodReadonly<infer I>
+            | z.ZodArray<infer I>
+            | z.ZodSet<infer I>
+        ? HasCodec<I>
+        : S extends z.ZodUnion<infer Members>
+          ? Members extends readonly unknown[]
+            ? true extends HasCodec<Members[number]>
+              ? true
+              : false
+            : false
+          : // the two-schema wrappers must each get their own branch- grouping
+            // them into one union breaks conditional type inference
+            S extends z.ZodPipe<infer A, infer B>
+            ? true extends HasCodec<A> | HasCodec<B>
+              ? true
+              : false
+            : S extends z.ZodIntersection<infer A, infer B>
+              ? true extends HasCodec<A> | HasCodec<B>
+                ? true
+                : false
+              : S extends z.ZodRecord<infer K, infer V>
+                ? true extends HasCodec<K> | HasCodec<V>
+                  ? true
+                  : false
+                : S extends z.ZodMap<infer K, infer V>
+                  ? true extends HasCodec<K> | HasCodec<V>
+                    ? true
+                    : false
+                  : S extends z.ZodTuple<infer Items, infer Rest>
+                    ? Items extends readonly unknown[]
+                      ? true extends HasCodec<Items[number]> | HasCodec<Rest>
+                        ? true
+                        : false
+                      : false
+                    : false;
+
+// a route must have its Route object passed to $path as `validator` when any
+// of its schemas contain a codec- without the runtime schema the codec's
+// encode step can't run, and the params would silently fall back to plain
+// JSON serialization and produce a URL the decode side can't parse
+type RouteRequiresValidator<T extends DynamicRoute> = true extends
+  HasCodec<T["searchParams"]> | HasCodec<T["routeParams"]>
+  ? true
+  : false;
+
 // basically just an object with a routeParams property that has a zod validator
 type DynamicLayout = Required<Pick<DynamicRoute, "routeParams">>;
 
@@ -138,9 +212,16 @@ type InferLayoutPropsType<T extends DynamicLayout, K extends string = never> = {
 // the input type for $path
 // if a route is static, it only needs the route property
 // if a route is dynamic, it needs the route property and the input types for the route
+// if a dynamic route's schemas contain a codec, the Route object is REQUIRED
+// as `validator` (and the params are typed as the validator's output types)
+// so forgetting it is a compile error instead of a silently broken URL
 type PathOptions<T extends AllRoutes> = T extends StaticRoutes
   ? StaticPathOptions<T>
-  : { route: T } & RouterInputs[T];
+  : T extends DynamicRoutes
+    ? RouteRequiresValidator<DynamicRouter[T]["routeType"]> extends true
+      ? PathOptionsWithValidator<T, DynamicRouter[T]["routeType"]>
+      : { route: T } & RouterInputs[T]
+    : { route: T } & RouterInputs[T];
 
 // the input type for $path when a Route object is passed as `validator`
 // params are typed as the validator OUTPUT types (e.g. Date instead of string)
@@ -222,6 +303,10 @@ export {
   PathOptions,
   PathOptionsWithValidator,
   InferRoute,
+
+  // internal- exported for type tests
+  HasCodec,
+  RouteRequiresValidator,
   ServerParseParamsResult,
   UseParamsResult,
 

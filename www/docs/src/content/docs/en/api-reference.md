@@ -136,10 +136,15 @@ type InferLayoutPropsType<T extends DynamicLayout, K extends string = never> = {
 
 ### `PathOptions`
 
-Provides the input type for `$path` but could be useful for other things.
+Provides the input type for `$path` but could be useful for other things. If a dynamic route's schemas contain a codec, this resolves to `PathOptionsWithValidator`, making the `validator` property required.
 
 ```ts
-type PathOptions<T extends AllRoutes> = { route: T } & RouterInputs[T];
+// RouteType is the registered Route object type for the route T
+type PathOptions<T extends AllRoutes> = T extends StaticRoutes
+  ? StaticPathOptions<T>
+  : RouteRequiresValidator<RouteType> extends true
+    ? PathOptionsWithValidator<T, RouteType>
+    : { route: T } & RouterInputs[T];
 ```
 
 ### `PathOptionsWithValidator`
@@ -155,7 +160,7 @@ type PathOptionsWithValidator<T extends AllRoutes, V extends DynamicRoute> = {
 
 ### `$path`
 
-Generates a path string for a given route, route params, and search params. Optionally accepts your `Route` object as `validator` to enable codec based custom serialization.
+Generates a path string for a given route, route params, and search params. Optionally accepts your `Route` object as `validator` to enable codec based custom serialization. If the route's schemas contain a codec, `validator` is required and omitting it is a compile error.
 
 ```ts
 declare function $path<T extends AllRoutes>(options: PathOptions<T>): string;
