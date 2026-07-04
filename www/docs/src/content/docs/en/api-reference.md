@@ -142,6 +142,14 @@ Provides the input type for `$path` but could be useful for other things.
 type PathOptions<T extends AllRoutes> = { route: T } & RouterInputs[T];
 ```
 
+### `defineConfig`
+
+Identity helper that provides type checking and autocompletion for `next-typesafe-url.config` files.
+
+```ts
+declare function defineConfig(config: Config): Config;
+```
+
 ### `$path`
 
 Generates a path string for a given route, route params, and search params.

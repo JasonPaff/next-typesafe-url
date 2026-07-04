@@ -27,4 +27,8 @@ declare module "@@@next-typesafe-url" {
     "/static-route": StaticRoute;
     "/static": StaticRoute;
   }
+
+  interface ExternalRouter {
+  
+  }
 }

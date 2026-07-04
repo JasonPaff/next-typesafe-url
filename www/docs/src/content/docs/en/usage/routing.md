@@ -40,6 +40,21 @@ import { $path } from "next-typesafe-url";
 
 _Neither should never happen if you are not ignoring the many typescript errors that would be thrown at you._
 
+## External routes
+
+Routes registered through the [`externalRoutes` config option](/en/setup/running-the-cli#externalroutes) (static assets, rewrites, anything the CLI cannot discover by scanning) are valid `$path` inputs like any static route:
+
+```ts
+// static external routes are plain strings in the config
+$path({ route: "/admin/index.html" });
+
+// dynamic external routes are typed by the routeType validator
+// referenced in the config
+$path({ route: "/external-blog/[slug]", routeParams: { slug: "hello" } });
+```
+
+Static string entries take no params. Dynamic entries reference a routeType file in the config and are typed exactly like scanned dynamic routes.
+
 ### Important Quirks
 
 #### Passing `undefined` for route params

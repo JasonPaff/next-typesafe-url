@@ -54,6 +54,82 @@ Override the default filename for the `routeType.ts` file in the app directory. 
 
 Show this information
 
+## Configuration file
+
+All CLI options (except `--help`) can also be set in a configuration file. The CLI searches for, in order: `next-typesafe-url.config.ts`, `next-typesafe-url.config.js`, `next-typesafe-url.config.mjs`, `next-typesafe-url.config.cjs`, or a `"next-typesafe-url"` key in `package.json`.
+
+CLI flags take precedence over config file values.
+
+The `defineConfig` helper provides type checking and autocomplete:
+
+```ts
+// next-typesafe-url.config.ts
+import { defineConfig } from "next-typesafe-url";
+
+export default defineConfig({
+  watch: false,
+  srcPath: "./src",
+  outputPath: "./_next-typesafe-url_.d.ts",
+  pageExtensions: ["tsx", "ts", "jsx", "js"],
+  filename: "routeType",
+  externalRoutes: ["/admin/index.html"],
+});
+```
+
+### externalRoutes
+
+Some paths are real URLs in your app but are not discoverable by scanning `app` or `pages`- for example static files served from the `public` directory, or paths handled by rewrites.
+
+The `externalRoutes` option registers these paths in the generated types so they are valid inputs for `$path`:
+
+```ts
+$path({ route: "/admin/index.html" });
+```
+
+A plain string registers a **static** route- no dynamic segments, no params.
+
+To register a **dynamic** external route, use the object form and point `routeType` at a file that exports a `Route` object and `RouteType` type, written exactly like a normal routeType.ts:
+
+```ts
+// next-typesafe-url.config.ts
+externalRoutes: [
+  "/admin/index.html",
+  {
+    route: "/external-blog/[slug]",
+    routeType: "./src/external-routes/externalBlog.ts",
+  },
+],
+```
+
+```ts
+// src/external-routes/externalBlog.ts
+import { type DynamicRoute } from "next-typesafe-url";
+import { z } from "zod";
+
+export const Route = {
+  routeParams: z.object({ slug: z.string() }),
+  searchParams: z.object({ ref: z.string().optional() }),
+} satisfies DynamicRoute;
+
+export type RouteType = typeof Route;
+```
+
+`$path` then types the route exactly like a scanned dynamic route, including search params and zod transforms/codecs:
+
+```ts
+$path({
+  route: "/external-blog/[slug]",
+  routeParams: { slug: "hello" },
+  searchParams: { ref: "homepage" },
+});
+```
+
+The `routeType` path is resolved relative to the directory the CLI is run from. The CLI errors if the file does not exist or does not export a `RouteType` type.
+
+External routes are only valid for `$path`- they never appear in `RouterInputs` or `RouterOutputs`. If a route is both discovered by scanning and listed in `externalRoutes`, the scanned route wins and the CLI prints a warning.
+
+`externalRoutes` is config-file only- there is no CLI flag for it.
+
 ### Add to your package.json scripts
 
 Add `next-typesafe-url` to your dev and build script in package.json.

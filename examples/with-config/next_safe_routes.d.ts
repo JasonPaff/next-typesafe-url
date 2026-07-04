@@ -16,4 +16,9 @@ declare module "@@@next-typesafe-url" {
     "/about": StaticRoute;
     "/": StaticRoute;
   }
+
+  interface ExternalRouter {
+    "/admin/index.html": StaticRoute;
+    "/external-blog/[slug]": InferRoute<import("./src/external-routes/externalBlog").RouteType>;
+  }
 }

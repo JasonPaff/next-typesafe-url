@@ -1,7 +1,12 @@
-import type { StaticRouter, DynamicRouter } from "@@@next-typesafe-url";
+import type {
+  StaticRouter,
+  DynamicRouter,
+  ExternalRouter,
+} from "@@@next-typesafe-url";
 import { z } from "zod";
 
 // a total map of every route and its input and output types (if it has any)
+// external routes are intentionally excluded- they are only valid for $path
 type AppRouter = StaticRouter & DynamicRouter;
 
 // extract only the input types from the router
@@ -19,6 +24,11 @@ type StaticRoutes = keyof StaticRouter;
 
 // all of the dynamic routes
 type DynamicRoutes = keyof DynamicRouter;
+
+// routes registered via the `externalRoutes` config option
+// these are not part of the Next.js app itself (e.g. static assets, rewrites)
+// so they only exist for $path- they never have page prop types
+type ExternalRoutes = keyof ExternalRouter;
 
 // converts a DynamicRoute into its inferred input and output types
 type InferRoute<T extends DynamicRoute> = {
@@ -136,25 +146,40 @@ type InferLayoutPropsType<T extends DynamicLayout, K extends string = never> = {
 } & { [P in K]: React.ReactNode };
 
 // the input type for $path
-// if a route is static, it only needs the route property
-// if a route is dynamic, it needs the route property and the input types for the route
-type PathOptions<T extends AllRoutes> = T extends StaticRoutes
-  ? StaticPathOptions<T>
-  : { route: T } & RouterInputs[T];
+// if a route is static or an external route without a validator,
+// it only needs the route property
+// external routes registered with a routeType validator behave exactly
+// like scanned dynamic routes- their entry is an InferRoute<...> and
+// $path takes the validator's input types
+// ExternalRoutes is `never` here but is populated in consuming apps
+// by the generated file's module augmentation
+type PathOptions<T extends AllRoutes> = T extends ExternalRoutes
+  ? ExternalRouter[T] extends StaticRoute
+    ? StaticPathOptions<T>
+    : ExternalRouter[T] extends { input: infer Input }
+      ? { route: T } & Input
+      : never
+  : T extends StaticRoutes
+    ? StaticPathOptions<T>
+    : T extends DynamicRoutes
+      ? { route: T } & RouterInputs[T]
+      : never;
 
 // checks if all properties of T are undefined
 type AllPossiblyUndefined<T> =
   Exclude<Partial<T>, undefined> extends T ? undefined : T;
 
 // just the route, with the other properties set to optional and undefined
-type StaticPathOptions<T extends StaticRoutes> = {
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents, @typescript-eslint/no-duplicate-type-constituents
+type StaticPathOptions<T extends StaticRoutes | ExternalRoutes> = {
   route: T;
   searchParams?: undefined;
   routeParams?: undefined;
 };
 
-// represents every route in the app
-type AllRoutes = keyof AppRouter;
+// represents every route in the app, plus any registered external routes
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents, @typescript-eslint/no-duplicate-type-constituents
+type AllRoutes = keyof AppRouter | ExternalRoutes;
 
 // a discriminated  union representing the return states of use*Params
 type UseParamsResult<T extends z.ZodObject<z.ZodRawShape>> =

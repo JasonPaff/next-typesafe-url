@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { defaultConfig } from "../src/config";
+import { defaultConfig, getExternalRouteErrors } from "../src/config";
 import type { Config } from "../src/config";
 
 /**
@@ -38,6 +38,7 @@ function mergeConfig(
     pageExtensions: normalizePageExtensions(
       cliFlags.pageExtensions ?? fileConfig?.pageExtensions,
     ),
+    externalRoutes: fileConfig?.externalRoutes ?? defaultConfig.externalRoutes,
   };
 }
 
@@ -52,6 +53,7 @@ describe("config merging", () => {
         outputPath: "./_next-typesafe-url_.d.ts",
         filename: "routeType",
         pageExtensions: ["tsx", "ts", "jsx", "js"],
+        externalRoutes: [],
       });
     });
 
@@ -70,6 +72,7 @@ describe("config merging", () => {
         outputPath: "./_next-typesafe-url_.d.ts",
         filename: "route-type",
         pageExtensions: ["tsx", "ts", "jsx", "js"],
+        externalRoutes: [],
       });
     });
 
@@ -90,6 +93,7 @@ describe("config merging", () => {
         outputPath: "./_next-typesafe-url_.d.ts",
         filename: "cli-route", // from CLI (overrides config)
         pageExtensions: ["tsx", "ts", "jsx", "js"],
+        externalRoutes: [],
       });
     });
 
@@ -108,6 +112,7 @@ describe("config merging", () => {
         outputPath: "./_next-typesafe-url_.d.ts",
         filename: "cli-route",
         pageExtensions: ["tsx", "ts", "jsx", "js"],
+        externalRoutes: [],
       });
     });
 
@@ -129,6 +134,7 @@ describe("config merging", () => {
         outputPath: "./types.d.ts", // from config
         filename: "config-route", // from config
         pageExtensions: ["tsx", "ts", "jsx", "js"], // from defaults
+        externalRoutes: [],
       });
     });
   });
@@ -284,6 +290,7 @@ describe("config merging", () => {
         outputPath: "./_next-typesafe-url_.d.ts",
         filename: "routeType",
         pageExtensions: ["tsx", "ts", "jsx", "js"],
+        externalRoutes: [],
       });
     });
 
@@ -305,6 +312,7 @@ describe("config merging", () => {
         outputPath: "./custom-output.d.ts",
         filename: "custom-route",
         pageExtensions: ["mdx", "tsx"],
+        externalRoutes: [],
       });
     });
 
@@ -332,6 +340,7 @@ describe("config merging", () => {
         outputPath: "./cli-output.d.ts",
         filename: "cli-route",
         pageExtensions: ["js", "jsx"],
+        externalRoutes: [],
       });
     });
 
@@ -352,7 +361,81 @@ describe("config merging", () => {
         outputPath: "./_next-typesafe-url_.d.ts", // from defaults
         filename: "cli-filename", // from CLI
         pageExtensions: ["tsx", "ts", "jsx", "js"], // from defaults
+        externalRoutes: [],
       });
+    });
+  });
+  describe("externalRoutes", () => {
+    test("defaults to empty array", () => {
+      const merged = mergeConfig({}, null);
+      expect(merged.externalRoutes).toEqual([]);
+    });
+
+    test("comes from config file", () => {
+      const merged = mergeConfig(
+        {},
+        { externalRoutes: ["/admin/index.html", "/legacy"] },
+      );
+      expect(merged.externalRoutes).toEqual(["/admin/index.html", "/legacy"]);
+    });
+
+    test("empty array in config is respected", () => {
+      const merged = mergeConfig({}, { externalRoutes: [] });
+      expect(merged.externalRoutes).toEqual([]);
+    });
+  });
+  describe("getExternalRouteErrors", () => {
+    test("accepts static strings and validator-backed dynamic routes", () => {
+      expect(
+        getExternalRouteErrors([
+          "/admin/index.html",
+          { route: "/external-blog/[slug]", routeType: "./src/blogRoute.ts" },
+          { route: "/files/[...parts]", routeType: "./src/filesRoute.ts" },
+          { route: "/wiki/[[...page]]", routeType: "./src/wikiRoute.ts" },
+        ]),
+      ).toEqual([]);
+    });
+
+    test("rejects routes without a leading slash", () => {
+      const errors = getExternalRouteErrors(["admin"]);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('"admin" must start with "/"');
+    });
+
+    test("rejects string entries with dynamic segments", () => {
+      const errors = getExternalRouteErrors(["/external-blog/[slug]"]);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("object form");
+    });
+
+    test("rejects object entries with malformed segments", () => {
+      const errors = getExternalRouteErrors([
+        { route: "/broken/[slug", routeType: "./src/route.ts" },
+      ]);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("malformed");
+    });
+
+    test("rejects object entries without dynamic segments", () => {
+      const errors = getExternalRouteErrors([
+        { route: "/just-static", routeType: "./src/route.ts" },
+      ]);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("plain strings");
+    });
+
+    test("rejects object entries with an empty routeType", () => {
+      const errors = getExternalRouteErrors([
+        { route: "/blog/[slug]", routeType: "  " },
+      ]);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("empty routeType");
+    });
+
+    test("rejects entries that are neither strings nor valid objects", () => {
+      const errors = getExternalRouteErrors([42 as unknown as string]);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("not a valid externalRoutes entry");
     });
   });
 });

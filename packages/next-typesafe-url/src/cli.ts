@@ -6,9 +6,11 @@ import {
   getPAGESRoutesWithExportedRoute,
   getAPPRoutesWithExportedRoute,
   generateTypesFile,
+  getExternalRouteFileErrors,
+  type ResolvedExternalRoute,
 } from "./generateTypes";
 import { loadConfig } from "./loadConfig";
-import { defaultConfig } from "./config";
+import { defaultConfig, getExternalRouteErrors } from "./config";
 
 const helpText = `
 Usage:
@@ -26,6 +28,9 @@ Options:
 --pageExtensions, A comma separated list of file extensions to consider as. DEFAULT: "tsx,ts,jsx,js"
 --filename, Override the default name of the RouteType file in the app directory. DEFAULT: "routeType.ts"
 --help,  Show this help message
+
+Config-file only options:
+externalRoutes, Routes not discoverable by scanning (e.g. static assets in /public). Strings register static routes; dynamic routes use { route, routeType } pointing at a routeType file. Added to the generated types for $path only.
 `;
 
 const cli = meow(helpText, {
@@ -65,10 +70,12 @@ function build({
   paths,
   pageExtensions,
   filename,
+  externalRoutes,
 }: {
   paths: Paths;
   pageExtensions: string[];
   filename: string;
+  externalRoutes: ResolvedExternalRoute[];
 }) {
   const { absoluteAppPath, absolutePagesPath } = paths;
 
@@ -94,6 +101,7 @@ function build({
     pagesRoutesInfo,
     paths,
     filename,
+    externalRoutes,
   });
   console.log(`Generated route types`);
 }
@@ -102,10 +110,12 @@ function watch({
   paths,
   pageExtensions,
   filename,
+  externalRoutes,
 }: {
   paths: Paths;
   pageExtensions: string[];
   filename: string;
+  externalRoutes: ResolvedExternalRoute[];
 }) {
   const { absoluteAppPath, absolutePagesPath } = paths;
 
@@ -113,14 +123,14 @@ function watch({
     chokidar
       .watch([`${absoluteAppPath}/**/*.{${pageExtensions.join(",")}}`])
       .on("change", () => {
-        build({ filename, paths, pageExtensions });
+        build({ filename, paths, pageExtensions, externalRoutes });
       });
   }
   if (absolutePagesPath) {
     chokidar
       .watch([`${absolutePagesPath}/**/*.{${pageExtensions.join(",")}}`])
       .on("change", () => {
-        build({ filename, paths, pageExtensions });
+        build({ filename, paths, pageExtensions, externalRoutes });
       });
   }
 
@@ -157,9 +167,41 @@ if (require.main === module) {
       pageExtensions: normalizePageExtensions(
         cli.flags.pageExtensions ?? fileConfig?.pageExtensions,
       ),
+      externalRoutes:
+        fileConfig?.externalRoutes ?? defaultConfig.externalRoutes,
     };
 
-    const { filename, srcPath, outputPath, pageExtensions } = mergedConfig;
+    const { filename, srcPath, outputPath, pageExtensions, externalRoutes } =
+      mergedConfig;
+
+    const externalRouteErrors = getExternalRouteErrors(externalRoutes);
+    if (externalRouteErrors.length > 0) {
+      console.log(
+        `Invalid externalRoutes config:\n${externalRouteErrors.join("\n")}`,
+      );
+      process.exit(1);
+    }
+
+    // resolve routeType paths relative to the cwd, like srcPath/outputPath
+    const resolvedExternalRoutes: ResolvedExternalRoute[] = externalRoutes.map(
+      (entry) =>
+        typeof entry === "string"
+          ? entry
+          : {
+              route: entry.route,
+              routeTypePath: path.join(process.cwd(), entry.routeType),
+            },
+    );
+
+    const externalRouteFileErrors = getExternalRouteFileErrors(
+      resolvedExternalRoutes,
+    );
+    if (externalRouteFileErrors.length > 0) {
+      console.log(
+        `Invalid externalRoutes config:\n${externalRouteFileErrors.join("\n")}`,
+      );
+      process.exit(1);
+    }
 
     const absoluteSrcPath = path.join(process.cwd(), srcPath);
 
@@ -188,10 +230,25 @@ if (require.main === module) {
     };
 
     if (mergedConfig.watch) {
-      build({ filename, paths, pageExtensions });
-      watch({ filename, paths, pageExtensions });
+      build({
+        filename,
+        paths,
+        pageExtensions,
+        externalRoutes: resolvedExternalRoutes,
+      });
+      watch({
+        filename,
+        paths,
+        pageExtensions,
+        externalRoutes: resolvedExternalRoutes,
+      });
     } else {
-      build({ filename, paths, pageExtensions });
+      build({
+        filename,
+        paths,
+        pageExtensions,
+        externalRoutes: resolvedExternalRoutes,
+      });
     }
   })();
 }

@@ -2,6 +2,47 @@ import fs from "fs";
 import path from "path";
 import type { Paths, RouteInformation } from "./cli";
 
+// a resolved external route: static routes are plain strings, dynamic
+// routes carry the ABSOLUTE path to their routeType file
+export type ResolvedExternalRoute =
+  | string
+  | {
+      route: string;
+      routeTypePath: string;
+    };
+
+// the same check the pages scanner uses to detect a routeType export
+const ROUTE_TYPE_EXPORT_REGEX = /export\s+type\s+RouteType\b/;
+
+/**
+ * Returns error messages for dynamic external routes whose routeType file
+ * is missing or does not export a `RouteType` type
+ */
+export function getExternalRouteFileErrors(
+  externalRoutes: ResolvedExternalRoute[],
+): string[] {
+  const errors: string[] = [];
+
+  for (const entry of externalRoutes) {
+    if (typeof entry === "string") continue;
+
+    if (!fs.existsSync(entry.routeTypePath)) {
+      errors.push(
+        `routeType file for "${entry.route}" does not exist: ${entry.routeTypePath}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(entry.routeTypePath, "utf8");
+    if (!ROUTE_TYPE_EXPORT_REGEX.test(content)) {
+      errors.push(
+        `routeType file for "${entry.route}" does not export a RouteType type: ${entry.routeTypePath}`,
+      );
+    }
+  }
+
+  return errors;
+}
+
 export function getPAGESRoutesWithExportedRoute({
   basePath,
   dir,
@@ -157,11 +198,13 @@ export function generateTypesFile({
   pagesRoutesInfo,
   paths,
   filename,
+  externalRoutes = [],
 }: {
   appRoutesInfo: RouteInformation | null;
   pagesRoutesInfo: RouteInformation | null;
   paths: Paths;
   filename: string;
+  externalRoutes?: ResolvedExternalRoute[];
 }): void {
   let routeCounter = 0;
 
@@ -211,6 +254,61 @@ export function generateTypesFile({
     }),
   ].join("\n  ");
 
+  // external routes only ever appear in $path, so a route that is
+  // discovered by scanning takes priority over an externalRoutes entry
+  const discoveredRoutes = new Set([
+    ...allHasRoute.map(({ route, type }) => {
+      const unescaped = unescapeUnderscores(route);
+      return type === "app"
+        ? unescaped.replace(/\/\([^()]+\)/g, "") || "/"
+        : unescaped;
+    }),
+    ...allDoesntHaveRoute_app.map(
+      (route) => unescapeUnderscores(route).replace(/\/\([^()]+\)/g, "") || "/",
+    ),
+    ...allDoesntHaveRoute_pages.map(unescapeUnderscores),
+  ]);
+
+  const routeOf = (entry: ResolvedExternalRoute) =>
+    typeof entry === "string" ? entry : entry.route;
+
+  const seenExternal = new Set<string>();
+  const uniqueExternalRoutes = externalRoutes.filter((entry) => {
+    const route = routeOf(entry);
+    if (seenExternal.has(route)) return false;
+    seenExternal.add(route);
+    return true;
+  });
+
+  const shadowedExternalRoutes = uniqueExternalRoutes
+    .map(routeOf)
+    .filter((route) => discoveredRoutes.has(route));
+  if (shadowedExternalRoutes.length > 0) {
+    console.warn(
+      `Warning: the following externalRoutes are already discovered routes and were ignored: ${shadowedExternalRoutes.join(
+        ", ",
+      )}`,
+    );
+  }
+
+  const externalRoutesDeclarations = uniqueExternalRoutes
+    .filter((entry) => !discoveredRoutes.has(routeOf(entry)))
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return `  "${entry}": StaticRoute;`;
+      }
+      const relativePath = path
+        .relative(path.dirname(paths.absoluteOutputPath), entry.routeTypePath)
+        // strip the file extension
+        .replace(/\.tsx?$/, "")
+        // replace backslashes with forward slashes
+        .replace(/\\/g, "/")
+        // ensure relative paths start with "./"
+        .replace(/^(?!\.\.\/)/, "./");
+      return `  "${entry.route}": InferRoute<import("${relativePath}").RouteType>;`;
+    })
+    .join("\n  ");
+
   const fileContentString = `${infoText.trim()}\n
 declare module "@@@next-typesafe-url" {
   import type { InferRoute, StaticRoute } from "next-typesafe-url";
@@ -221,6 +319,10 @@ declare module "@@@next-typesafe-url" {
 
   interface StaticRouter {
   ${staticRoutesDeclarations}
+  }
+
+  interface ExternalRouter {
+  ${externalRoutesDeclarations}
   }
 }
 `;

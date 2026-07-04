@@ -33,6 +33,22 @@ export default function Home() {
         <li>✅ Automatic type generation</li>
       </ul>
 
+      {/* externalRoutes entries from the config file are valid $path inputs */}
+      <a href={$path({ route: "/admin/index.html" })}>
+        External route registered via config
+      </a>
+
+      {/* dynamic external routes are typed by their routeType validator */}
+      <a
+        href={$path({
+          route: "/external-blog/[slug]",
+          routeParams: { slug: "hello-world" },
+          searchParams: { ref: "homepage" },
+        })}
+      >
+        Dynamic external route
+      </a>
+
       <button
         onClick={handleNavigate}
         style={{

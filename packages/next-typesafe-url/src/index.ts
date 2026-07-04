@@ -15,6 +15,7 @@ import type {
   ServerParseParamsResult,
 } from "./types";
 import type { Config } from "./config";
+export { defineConfig } from "./config";
 
 export type {
   AllRoutes,
@@ -43,11 +44,16 @@ export type {
  * @example $path({ route: "/foo", searchParams: { bar: "baz" } }) -> "/foo?bar=baz"
  * @example $path({ route: "/foo/[bar]", routeParams: { bar: "baz" }, searchParams: { lux: "flux" } }) -> "/foo/baz?lux=flux"
  */
-export function $path<T extends AllRoutes>({
+export function $path<T extends AllRoutes>(options: PathOptions<T>): string;
+export function $path({
   route,
   searchParams,
   routeParams,
-}: PathOptions<T>): string {
+}: {
+  route: string;
+  searchParams?: Record<string, unknown>;
+  routeParams?: Record<string, unknown>;
+}): string {
   if (searchParams && routeParams) {
     const searchString = generateSearchParamStringFromObj(searchParams);
     const routeString = encodeAndFillRoute(route, routeParams);
@@ -60,7 +66,6 @@ export function $path<T extends AllRoutes>({
   } else if (searchParams && !routeParams) {
     const searchString = generateSearchParamStringFromObj(searchParams);
 
-    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- route is always a string
     return `${route}${searchString}`;
   } else {
     //both are undefined
