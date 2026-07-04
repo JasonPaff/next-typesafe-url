@@ -142,6 +142,15 @@ type PathOptions<T extends AllRoutes> = T extends StaticRoutes
   ? StaticPathOptions<T>
   : { route: T } & RouterInputs[T];
 
+// the input type for $path when a Route object is passed as `validator`
+// params are typed as the validator OUTPUT types (e.g. Date instead of string)
+// and are run through the encode direction of the schema before serialization,
+// so zod codecs can define custom serialization per field
+type PathOptionsWithValidator<T extends AllRoutes, V extends DynamicRoute> = {
+  route: T;
+  validator: V;
+} & HandleUndefined<InferOutput<V>>;
+
 // checks if all properties of T are undefined
 type AllPossiblyUndefined<T> =
   Exclude<Partial<T>, undefined> extends T ? undefined : T;
@@ -211,6 +220,7 @@ export {
   // used by generated file
   StaticRoute,
   PathOptions,
+  PathOptionsWithValidator,
   InferRoute,
   ServerParseParamsResult,
   UseParamsResult,

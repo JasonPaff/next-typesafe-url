@@ -13,6 +13,7 @@ declare module "@@@next-typesafe-url" {
     "/foo/[id]/nest": InferRoute<import("./src/app/(test)/foo/[id]/nest/routeType").RouteType>;
     "/foo/[id]": InferRoute<import("./src/app/(test)/foo/[id]/routeType").RouteType>;
     "/client/[...client]": InferRoute<import("./src/app/client/[...client]/routeType").RouteType>;
+    "/codec-route": InferRoute<import("./src/app/codec-route/routeType").RouteType>;
     "/jsonRoute/[foo]": InferRoute<import("./src/app/jsonRoute/[foo]/routeType").RouteType>;
     "/transform": InferRoute<import("./src/app/transform/routeType").RouteType>;
     "/[slug]/[...foo]": InferRoute<import("./src/app/[slug]/[...foo]/routeType").RouteType>;

@@ -142,16 +142,26 @@ Provides the input type for `$path` but could be useful for other things.
 type PathOptions<T extends AllRoutes> = { route: T } & RouterInputs[T];
 ```
 
-### `$path`
+### `PathOptionsWithValidator`
 
-Generates a path string for a given route, route params, and search params.
+The input type for `$path` when a `Route` object is passed as `validator`. Params are typed as the validator's output types and are run through the encode direction of the schema, so zod codecs can define custom serialization.
 
 ```ts
-declare function $path<T extends AllRoutes>({
-  route,
-  searchParams,
-  routeParams,
-}: PathOptions<T>): string;
+type PathOptionsWithValidator<T extends AllRoutes, V extends DynamicRoute> = {
+  route: T;
+  validator: V;
+} & HandleUndefined<InferOutput<V>>;
+```
+
+### `$path`
+
+Generates a path string for a given route, route params, and search params. Optionally accepts your `Route` object as `validator` to enable codec based custom serialization.
+
+```ts
+declare function $path<T extends AllRoutes>(options: PathOptions<T>): string;
+declare function $path<T extends AllRoutes, V extends DynamicRoute>(
+  options: PathOptionsWithValidator<T, V>,
+): string;
 ```
 
 ### `useParamsResult`

@@ -1,8 +1,10 @@
 // !!! huge credit to yesmeck https://github.com/yesmeck/remix-routes as well as Tanner Linsley https://tanstack.com/router/v1 for the inspiration for this
+import { z } from "zod";
 import { generateSearchParamStringFromObj, encodeAndFillRoute } from "./utils";
 import type {
   AllRoutes,
   PathOptions,
+  PathOptionsWithValidator,
   RouterInputs,
   RouterOutputs,
   InferRoute,
@@ -19,6 +21,7 @@ import type { Config } from "./config";
 export type {
   AllRoutes,
   PathOptions,
+  PathOptionsWithValidator,
   RouterInputs,
   RouterOutputs,
   InferRoute,
@@ -36,18 +39,46 @@ export type {
 /**
  * Serializes and encodes the passed search and route param objects and merges them with the route string.
  *
+ * If your `Route` object is passed as `validator`, the params are typed as the
+ * validator's OUTPUT types and are run through the encode direction of the
+ * schema first. This lets zod codecs define custom serialization per field
+ * (e.g. `Date` objects, custom id formats, comma separated arrays).
+ *
  * @throws If a dynamic segment or catch-all segment in the route does not have a corresponding value in routeParams.
  * @throws If any of the passed values are not a non-empty string, number, boolean, array, object, or null.
+ * @throws If a validator is passed and the params fail to encode.
  *
  * @example $path({ route: "/foo/[bar]", routeParams: { bar: "baz" } }) -> "/foo/baz"
  * @example $path({ route: "/foo", searchParams: { bar: "baz" } }) -> "/foo?bar=baz"
  * @example $path({ route: "/foo/[bar]", routeParams: { bar: "baz" }, searchParams: { lux: "flux" } }) -> "/foo/baz?lux=flux"
+ * @example $path({ route: "/post", searchParams: { date: new Date() }, validator: Route }) -> "/post?date=2024-01-01T00%3A00%3A00.000Z"
  */
-export function $path<T extends AllRoutes>({
+export function $path<T extends AllRoutes>(options: PathOptions<T>): string;
+export function $path<T extends AllRoutes, V extends DynamicRoute>(
+  options: PathOptionsWithValidator<T, V>,
+): string;
+export function $path({
   route,
-  searchParams,
-  routeParams,
-}: PathOptions<T>): string {
+  searchParams: rawSearchParams,
+  routeParams: rawRouteParams,
+  validator,
+}: {
+  route: string;
+  searchParams?: Record<string, unknown>;
+  routeParams?: Record<string, unknown>;
+  validator?: DynamicRoute;
+}): string {
+  // if a validator is passed, run the params through the encode
+  // direction of the schema so codecs can apply custom serialization
+  const searchParams =
+    validator?.searchParams && rawSearchParams
+      ? z.encode(validator.searchParams, rawSearchParams)
+      : rawSearchParams;
+  const routeParams =
+    validator?.routeParams && rawRouteParams
+      ? z.encode(validator.routeParams, rawRouteParams)
+      : rawRouteParams;
+
   if (searchParams && routeParams) {
     const searchString = generateSearchParamStringFromObj(searchParams);
     const routeString = encodeAndFillRoute(route, routeParams);
@@ -60,7 +91,6 @@ export function $path<T extends AllRoutes>({
   } else if (searchParams && !routeParams) {
     const searchString = generateSearchParamStringFromObj(searchParams);
 
-    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- route is always a string
     return `${route}${searchString}`;
   } else {
     //both are undefined

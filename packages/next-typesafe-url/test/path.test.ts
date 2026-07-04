@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { $path } from "../src";
 
-// @ts-expect-error -- test
 const $testPath: (args: {
   route: string;
   searchParams?: Record<string, unknown>;
