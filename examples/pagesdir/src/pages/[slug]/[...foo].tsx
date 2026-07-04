@@ -1,6 +1,10 @@
 import type { NextPage } from "next";
-import { $path, type DynamicRoute } from "next-typesafe-url";
-import { useRouteParams, useSearchParams } from "next-typesafe-url/pages";
+import { $path, TypedLink, type DynamicRoute } from "next-typesafe-url";
+import {
+  useRouteParams,
+  useSearchParams,
+  useTypedRouter,
+} from "next-typesafe-url/pages";
 import Link from "next/link";
 import { useState } from "react";
 import { z } from "zod";
@@ -32,26 +36,46 @@ const Page: NextPage = () => {
     Route.searchParams,
   );
 
+  const router = useTypedRouter();
+
   return (
     <>
       <Link href={$path({ route: "/" })}>Back</Link>
       <br />
       <input value={input} onChange={(e) => setInput(e.target.value)} />
-      <Link
-        href={$path({
-          route: "/[slug]/[...foo]",
-          routeParams: {
-            slug: input === "" ? "default" : input,
-            foo: [123, 424, 343],
-          },
-          searchParams: {
-            location: "us",
-            userInfo: { name: "string", age: 123 },
-          },
-        })}
+      <TypedLink
+        route="/[slug]/[...foo]"
+        routeParams={{
+          slug: input === "" ? "default" : input,
+          foo: [123, 424, 343],
+        }}
+        searchParams={{
+          location: "us",
+          userInfo: { name: "string", age: 123 },
+        }}
       >
         hooks
-      </Link>
+      </TypedLink>
+      <button
+        onClick={() =>
+          void router.push(
+            {
+              route: "/[slug]/[...foo]",
+              routeParams: {
+                slug: input === "" ? "default" : input,
+                foo: [123, 424, 343],
+              },
+              searchParams: {
+                location: "eu",
+                userInfo: { name: "string", age: 123 },
+              },
+            },
+            { shallow: true },
+          )
+        }
+      >
+        push via useTypedRouter
+      </button>
       <br />
       <h1>routeParams</h1>
       <div>{`data: ${JSON.stringify(routeData)}`}</div>

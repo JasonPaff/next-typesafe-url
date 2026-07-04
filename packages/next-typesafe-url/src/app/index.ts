@@ -1,13 +1,21 @@
 // !!! huge credit to yesmeck https://github.com/yesmeck/remix-routes as well as Tanner Linsley https://tanstack.com/router/v1 for the inspiration for this
 
-import type { UseParamsResult } from "../types";
+import type {
+  AllRoutes,
+  DynamicRoute,
+  PathOptions,
+  PathOptionsWithValidator,
+  UseParamsResult,
+} from "../types";
 import {
   useParams,
+  useRouter as useNextRouter,
   useSearchParams as useNextSearchParams,
 } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import {
+  buildPath,
   parseObjectFromReadonlyURLParams,
   parseObjectFromStringRecord,
 } from "../utils";
@@ -160,3 +168,90 @@ export function useSearchParams<T extends z.ZodObject<z.ZodRawShape>>(
     }
   }
 }
+
+// next/navigation does not export its router instance or option types,
+// so they are derived from the useRouter return type instead
+type AppRouterInstance = ReturnType<typeof useNextRouter>;
+type NavigateOptions = NonNullable<Parameters<AppRouterInstance["push"]>[1]>;
+type PrefetchOptions = NonNullable<
+  Parameters<AppRouterInstance["prefetch"]>[1]
+>;
+
+// push/replace take the same options as $path instead of a string,
+// including the validator overload for codec routes
+interface TypedNavigate {
+  <T extends AllRoutes>(
+    options: PathOptions<T>,
+    navigateOptions?: NavigateOptions,
+  ): void;
+  <T extends AllRoutes, V extends DynamicRoute>(
+    options: PathOptionsWithValidator<T, V>,
+    navigateOptions?: NavigateOptions,
+  ): void;
+}
+
+interface TypedPrefetch {
+  <T extends AllRoutes>(
+    options: PathOptions<T>,
+    prefetchOptions?: PrefetchOptions,
+  ): void;
+  <T extends AllRoutes, V extends DynamicRoute>(
+    options: PathOptionsWithValidator<T, V>,
+    prefetchOptions?: PrefetchOptions,
+  ): void;
+}
+
+type TypedAppRouterInstance = Omit<
+  AppRouterInstance,
+  "push" | "replace" | "prefetch"
+> & {
+  push: TypedNavigate;
+  replace: TypedNavigate;
+  prefetch: TypedPrefetch;
+};
+
+// the loose runtime shape of the typed methods- the interfaces above are the
+// public face, this is what the implementations are written against
+type UntypedPathOptions = {
+  route: string;
+  searchParams?: Record<string, unknown>;
+  routeParams?: Record<string, unknown>;
+  validator?: DynamicRoute;
+};
+
+/**
+ * FOR APP DIRECTORY ONLY:
+ * A typesafe wrapper around `next/navigation`'s `useRouter`.
+ * `push`, `replace`, and `prefetch` take the same options as `$path`
+ * instead of a string- `route` autocompletes and the params are typechecked.
+ * All other properties are forwarded from the underlying router unchanged.
+ *
+ * The same `validator` rules as `$path` apply: routes whose schemas contain
+ * codecs must pass their `Route` object as `validator`.
+ *
+ * @example
+ * const router = useTypedRouter();
+ * router.push({ route: "/foo/[bar]", routeParams: { bar: "baz" } });
+ */
+export function useTypedRouter(): TypedAppRouterInstance {
+  const router = useNextRouter();
+
+  return useMemo(
+    () => ({
+      ...router,
+      push: (options: UntypedPathOptions, navigateOptions?: NavigateOptions) =>
+        router.push(buildPath(options), navigateOptions),
+      replace: (
+        options: UntypedPathOptions,
+        navigateOptions?: NavigateOptions,
+      ) => router.replace(buildPath(options), navigateOptions),
+      prefetch: (
+        options: UntypedPathOptions,
+        prefetchOptions?: PrefetchOptions,
+      ) => router.prefetch(buildPath(options), prefetchOptions),
+    }),
+    [router],
+  );
+}
+
+export type { TypedAppRouterInstance, TypedNavigate, TypedPrefetch };

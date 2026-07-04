@@ -1,6 +1,5 @@
 // !!! huge credit to yesmeck https://github.com/yesmeck/remix-routes as well as Tanner Linsley https://tanstack.com/router/v1 for the inspiration for this
-import { z } from "zod";
-import { generateSearchParamStringFromObj, encodeAndFillRoute } from "./utils";
+import { buildPath } from "./utils";
 import type {
   AllRoutes,
   PathOptions,
@@ -62,43 +61,17 @@ export function $path<T extends AllRoutes>(options: PathOptions<T>): string;
 export function $path<T extends AllRoutes, V extends DynamicRoute>(
   options: PathOptionsWithValidator<T, V>,
 ): string;
-export function $path({
-  route,
-  searchParams: rawSearchParams,
-  routeParams: rawRouteParams,
-  validator,
-}: {
+export function $path(options: {
   route: string;
   searchParams?: Record<string, unknown>;
   routeParams?: Record<string, unknown>;
   validator?: DynamicRoute;
 }): string {
-  // if a validator is passed, run the params through the encode
-  // direction of the schema so codecs can apply custom serialization
-  const searchParams =
-    validator?.searchParams && rawSearchParams
-      ? z.encode(validator.searchParams, rawSearchParams)
-      : rawSearchParams;
-  const routeParams =
-    validator?.routeParams && rawRouteParams
-      ? z.encode(validator.routeParams, rawRouteParams)
-      : rawRouteParams;
-
-  if (searchParams && routeParams) {
-    const searchString = generateSearchParamStringFromObj(searchParams);
-    const routeString = encodeAndFillRoute(route, routeParams);
-
-    return `${routeString}${searchString}`;
-  } else if (routeParams && !searchParams) {
-    const routeString = encodeAndFillRoute(route, routeParams);
-
-    return routeString;
-  } else if (searchParams && !routeParams) {
-    const searchString = generateSearchParamStringFromObj(searchParams);
-
-    return `${route}${searchString}`;
-  } else {
-    //both are undefined
-    return route;
-  }
+  return buildPath(options);
 }
+
+export { TypedLink } from "./link";
+export type {
+  TypedLinkProps,
+  TypedLinkPropsWithValidator,
+} from "./link";

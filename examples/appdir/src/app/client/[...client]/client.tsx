@@ -1,9 +1,13 @@
 "use client";
 
-import { $path } from "next-typesafe-url";
+import { $path, TypedLink } from "next-typesafe-url";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams, useRouteParams } from "next-typesafe-url/app";
+import {
+  useSearchParams,
+  useRouteParams,
+  useTypedRouter,
+} from "next-typesafe-url/app";
 import { Route } from "./routeType";
 
 export const Client = () => {
@@ -24,6 +28,7 @@ export const Inner = () => {
 
   const params = useSearchParams(Route.searchParams);
   const routeParams = useRouteParams(Route.routeParams);
+  const router = useTypedRouter();
 
   return (
     <div className="flex flex-col space-y-5">
@@ -32,17 +37,26 @@ export const Inner = () => {
       <input value={input} onChange={(e) => setInput(e.target.value)} />
       <br />
       <input value={input2} onChange={(e) => setInput2(e.target.value)} />
-      <Link
-        href={$path({
-          route: "/client/[...client]",
-          routeParams: { client: [input2 === "" ? "default" : input2, 123] },
-          searchParams: {
-            location: input,
-          },
-        })}
+      <TypedLink
+        route="/client/[...client]"
+        routeParams={{ client: [input2 === "" ? "default" : input2, 123] }}
+        searchParams={{ location: input }}
       >
         hooks
-      </Link>
+      </TypedLink>
+      <button
+        onClick={() =>
+          router.push({
+            route: "/client/[...client]",
+            routeParams: {
+              client: [input2 === "" ? "default" : input2, 123],
+            },
+            searchParams: { location: input },
+          })
+        }
+      >
+        push via useTypedRouter
+      </button>
       <br />
       <h1>searchParams</h1>
       <div>{`data: ${JSON.stringify(params)}`}</div>

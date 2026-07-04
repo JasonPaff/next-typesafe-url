@@ -1,5 +1,5 @@
 import { ReadonlyURLSearchParams } from "next/navigation";
-import type { ServerParseParamsResult } from "./types";
+import type { DynamicRoute, ServerParseParamsResult } from "./types";
 import { z } from "zod";
 
 // * TESTED
@@ -311,6 +311,61 @@ export function encodeAndFillRoute(
 
   // join the parts with a slash
   return parts.join("/");
+}
+
+/**
+ * The untyped implementation behind `$path`, `TypedLink`, and `useTypedRouter`.
+ * Serializes and encodes the passed search and route param objects and merges
+ * them with the route string. If a validator is passed, the params are run
+ * through the encode direction of its schemas first so codecs can apply
+ * custom serialization.
+ *
+ * The route-level type safety lives in the callers- this function is the
+ * single shared runtime.
+ *
+ * @throws If a dynamic segment or catch-all segment in the route does not have a corresponding value in routeParams.
+ * @throws If any of the passed values are not a non-empty string, number, boolean, array, object, or null.
+ * @throws If a validator is passed and the params fail to encode.
+ */
+export function buildPath({
+  route,
+  searchParams: rawSearchParams,
+  routeParams: rawRouteParams,
+  validator,
+}: {
+  route: string;
+  searchParams?: Record<string, unknown>;
+  routeParams?: Record<string, unknown>;
+  validator?: DynamicRoute;
+}): string {
+  // if a validator is passed, run the params through the encode
+  // direction of the schema so codecs can apply custom serialization
+  const searchParams =
+    validator?.searchParams && rawSearchParams
+      ? z.encode(validator.searchParams, rawSearchParams)
+      : rawSearchParams;
+  const routeParams =
+    validator?.routeParams && rawRouteParams
+      ? z.encode(validator.routeParams, rawRouteParams)
+      : rawRouteParams;
+
+  if (searchParams && routeParams) {
+    const searchString = generateSearchParamStringFromObj(searchParams);
+    const routeString = encodeAndFillRoute(route, routeParams);
+
+    return `${routeString}${searchString}`;
+  } else if (routeParams && !searchParams) {
+    const routeString = encodeAndFillRoute(route, routeParams);
+
+    return routeString;
+  } else if (searchParams && !routeParams) {
+    const searchString = generateSearchParamStringFromObj(searchParams);
+
+    return `${route}${searchString}`;
+  } else {
+    //both are undefined
+    return route;
+  }
 }
 
 // * TESTED
