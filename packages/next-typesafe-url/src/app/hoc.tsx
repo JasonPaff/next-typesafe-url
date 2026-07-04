@@ -1,12 +1,16 @@
 import type { JSX, ReactNode } from "react";
-import { parseServerSideParams } from "../utils";
+import {
+  parseServerSideParams,
+  handleParamsPromiseRejection as catchHandler,
+} from "../utils";
 import type {
   DynamicRoute,
   DynamicLayout,
   InferPagePropsType,
   InferLayoutPropsType,
+  InferGenerateMetadataPropsType,
 } from "../types";
-import { z } from "zod";
+import type { Metadata, ResolvingMetadata } from "next";
 
 // the props passed to a page component by Next.js
 // https://nextjs.org/docs/app/api-reference/file-conventions/page
@@ -179,9 +183,95 @@ export function withLayoutParamValidation<
   return ValidatedLayoutComponent;
 }
 
-function catchHandler(error: unknown) {
-  if (error instanceof z.ZodError) {
-    throw error;
-  }
-  return void 0;
+// the props Next.js passes to a generateMetadata function
+// https://nextjs.org/docs/app/api-reference/functions/generate-metadata
+type NextGenerateMetadataProps = {
+  params: Promise<Record<string, string | string[]>>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+/**
+ * FOR APP DIRECTORY ONLY:
+ * A higher order function that validates the params passed to a `generateMetadata` function.
+ * The function you wrap with this should use `InferGenerateMetadataPropsType` for its props.
+ * It should be exported as `generateMetadata` from `page.tsx`.
+ * @param generateMetadata - the generateMetadata function to wrap
+ * @param validator - the validator to use, this should be your `Route` object
+ *
+ * @example
+ * export const generateMetadata = withMetadataParamValidation(
+ *   metadataGenerator,
+ *   Route,
+ * );
+ */
+export function withMetadataParamValidation<Validator extends DynamicRoute>(
+  generateMetadata: (
+    props: InferGenerateMetadataPropsType<Validator>,
+    parent: ResolvingMetadata,
+  ) => Metadata | Promise<Metadata>,
+  validator: Validator,
+): (
+  props: NextGenerateMetadataProps,
+  parent: ResolvingMetadata,
+) => Promise<Metadata> {
+  return (props, parent) => {
+    // pull out the params and searchParams from the props
+    const { params: paramsPromise, searchParams: searchParamsPromise } = props;
+
+    const params =
+      paramsPromise instanceof Promise
+        ? paramsPromise
+        : Promise.resolve(paramsPromise);
+
+    // if the validator has routeParams, parse them
+    // if there are parsing errors, throw them
+    const routeParams = params
+      .then((rawParams) => {
+        let parsedRouteParamsResult = undefined;
+        if (validator.routeParams) {
+          parsedRouteParamsResult = parseServerSideParams({
+            params: rawParams,
+            validator: validator.routeParams,
+          });
+        }
+        if (parsedRouteParamsResult?.isError) {
+          throw parsedRouteParamsResult.error;
+        } else {
+          return parsedRouteParamsResult?.data;
+        }
+      })
+      .catch(catchHandler);
+
+    const search =
+      searchParamsPromise instanceof Promise
+        ? searchParamsPromise
+        : Promise.resolve(searchParamsPromise);
+
+    // if the validator has searchParams, parse them
+    // if there are parsing errors, throw them
+    const searchParams = search
+      .then((rawSearchParams) => {
+        let parsedSearchParamsResult = undefined;
+        if (validator.searchParams) {
+          parsedSearchParamsResult = parseServerSideParams({
+            params: rawSearchParams ?? {},
+            validator: validator.searchParams,
+          });
+        }
+        if (parsedSearchParamsResult?.isError) {
+          throw parsedSearchParamsResult.error;
+        } else {
+          return parsedSearchParamsResult?.data;
+        }
+      })
+      .catch(catchHandler);
+
+    // call the wrapped function with the validated params
+    const newProps = {
+      routeParams,
+      searchParams,
+    } as InferGenerateMetadataPropsType<Validator>;
+
+    return Promise.resolve(generateMetadata(newProps, parent));
+  };
 }

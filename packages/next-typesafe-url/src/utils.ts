@@ -350,3 +350,16 @@ export function parseServerSideParams<T extends z.ZodObject<z.ZodRawShape>>({
     };
   }
 }
+
+/**
+ * Rejection handler for the param-validation promise chains used by
+ * the page/layout HOCs and the generateMetadata wrapper.
+ * Zod errors are validation failures and are rethrown so Next surfaces them,
+ * anything else resolves to undefined.
+ */
+export function handleParamsPromiseRejection(error: unknown): undefined {
+  if (error instanceof z.ZodError) {
+    throw error;
+  }
+  return void 0;
+}

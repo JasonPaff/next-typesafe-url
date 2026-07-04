@@ -135,6 +135,11 @@ type InferLayoutPropsType<T extends DynamicLayout, K extends string = never> = {
   children: React.ReactNode;
 } & { [P in K]: React.ReactNode };
 
+// infers the props for a validated generateMetadata function
+// identical inference to InferPagePropsType, aliased for clarity at usage sites
+type InferGenerateMetadataPropsType<T extends DynamicRoute> =
+  InferPagePropsType<T>;
+
 // the input type for $path
 // if a route is static, it only needs the route property
 // if a route is dynamic, it needs the route property and the input types for the route
@@ -219,4 +224,5 @@ export {
   DynamicLayout,
   InferPagePropsType,
   InferLayoutPropsType,
+  InferGenerateMetadataPropsType,
 };

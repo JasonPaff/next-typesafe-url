@@ -64,6 +64,31 @@ export default withParamValidation(Page, Route);
 
 If the zod validation fails, the promise for `searchParams`/`routeParams` will reject with a `ZodError`.
 
+### Usage with generateMetadata
+
+`withMetadataParamValidation` wraps a [`generateMetadata`](https://nextjs.org/docs/app/api-reference/functions/generate-metadata) function the same way `withParamValidation` wraps a page component, validating the params with the same `Route` object:
+
+```tsx
+// page.tsx
+import { withMetadataParamValidation } from "next-typesafe-url/app/hoc";
+import { type InferGenerateMetadataPropsType } from "next-typesafe-url";
+import { Route, type RouteType } from "./routeType";
+
+type MetadataProps = InferGenerateMetadataPropsType<RouteType>;
+
+async function metadataGenerator(props: MetadataProps) {
+  const searchParams = await props.searchParams;
+  return { title: searchParams.title ?? "fallback title" };
+}
+
+export const generateMetadata = withMetadataParamValidation(
+  metadataGenerator,
+  Route,
+);
+```
+
+Like the page HOC, `routeParams` and `searchParams` are promises of the validated output types, and a `ZodError` is thrown if validation fails. The second argument of your wrapped function receives Next's `parent` resolving metadata untouched.
+
 ### Usage in layout.tsx
 
 Layouts only have access to route params, not search params ([see why](https://nextjs.org/docs/app/api-reference/file-conventions/page#good-to-know)).

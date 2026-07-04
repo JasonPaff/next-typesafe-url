@@ -134,6 +134,15 @@ type InferLayoutPropsType<T extends DynamicLayout, K extends string = never> = {
 } & { [P in K]: React.ReactNode };
 ```
 
+### `InferGenerateMetadataPropsType`
+
+Infers the prop types for `generateMetadata` functions wrapped with `withMetadataParamValidation`. Identical inference to `InferPagePropsType`.
+
+```ts
+type InferGenerateMetadataPropsType<T extends DynamicRoute> =
+  InferPagePropsType<T>;
+```
+
 ### `PathOptions`
 
 Provides the input type for `$path` but could be useful for other things.
@@ -259,6 +268,22 @@ declare function withLayoutParamValidation(
   Component: SomeReactComponent,
   validator: DynamicLayout,
 ): SomeReactComponent;
+```
+
+### `withMetadataParamValidation`
+
+A higher order function that validates the params passed to a `generateMetadata` function.
+The function you wrap with this should use `InferGenerateMetadataPropsType` for its props.
+It should be exported as `generateMetadata` from `page.tsx`.
+
+```ts
+declare function withMetadataParamValidation(
+  generateMetadata: (
+    props: InferGenerateMetadataPropsType<Validator>,
+    parent: ResolvingMetadata,
+  ) => Metadata | Promise<Metadata>,
+  validator: DynamicRoute,
+): (props, parent) => Promise<Metadata>;
 ```
 
 ## `next-typesafe-url/pages`
